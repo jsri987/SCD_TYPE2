@@ -1,0 +1,26 @@
+--get columns for table
+CREATE OR REPLACE FUNCTION get_columns_for_table (
+     table_owner   VARCHAR2,
+     t_name   VARCHAR2,
+     prefix  VARCHAR2
+  ) RETURN  CLOB
+  IS
+     v_text CLOB;
+  BEGIN
+     FOR getrec IN (SELECT column_name
+                      FROM all_tab_columns
+                     WHERE table_name = t_name
+        AND owner = table_owner
+        AND data_type<>'BLOB')
+     LOOP
+       v_text := v_text
+          || ','
+          || prefix
+          || getrec.column_name
+          || CHR (10)
+          || '                             ';
+     END LOOP;
+
+     RETURN ltrim(v_text,',');
+  END;
+/

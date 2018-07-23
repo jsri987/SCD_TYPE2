@@ -1,0 +1,99 @@
+--Department_test SCD type 2 implementation
+ENABLEOUT 32000;
+
+CREATE OR REPLACE TRIGGER TRIGGER_DEPARTMENTS_TEST AFTER INSERT OR UPDATE OR DELETE ON HR.DEPARTMENTS_TEST FOR EACH ROW
+DECLARE 
+ v_user varchar2(30):=null;
+ v_action varchar2(15);
+BEGIN
+   SELECT SYS_CONTEXT ('USERENV', 'session_user') session_user
+   INTO v_user
+   FROM DUAL;
+ if inserting then 
+ v_action:='INSERT';
+      insert into DEPARTMENTS_TEST_HIST(DEPARTMENT_ID
+                             ,DEPARTMENT_NAME
+                             ,MANAGER_ID
+                             ,LOCATION_ID
+                             ,EFF_DT
+                             ,END_DT
+                             ,SK_DEPARTMENT_ID
+                                   ,AUDIT_ACTION,AUDIT_BY,AUDIT_AT)
+      values (:new.DEPARTMENT_ID
+                             ,:new.DEPARTMENT_NAME
+                             ,:new.MANAGER_ID
+                             ,:new.LOCATION_ID
+                             ,:new.EFF_DT
+                             ,:new.END_DT
+                             ,:new.SK_DEPARTMENT_ID
+                                   ,'I',v_user,current_timestamp);
+ elsif updating then 
+ v_action:='UPDATE';
+   if ( (:old.DEPARTMENT_ID <> :new.DEPARTMENT_ID) or (:old.DEPARTMENT_ID IS NULL and  :new.DEPARTMENT_ID IS NOT NULL)  or (:old.DEPARTMENT_ID IS NOT NULL and  :new.DEPARTMENT_ID IS NULL))
+                 or( (:old.DEPARTMENT_NAME <> :new.DEPARTMENT_NAME) or (:old.DEPARTMENT_NAME IS NULL and  :new.DEPARTMENT_NAME IS NOT NULL)  or (:old.DEPARTMENT_NAME IS NOT NULL and  :new.DEPARTMENT_NAME IS NULL))
+                 or( (:old.MANAGER_ID <> :new.MANAGER_ID) or (:old.MANAGER_ID IS NULL and  :new.MANAGER_ID IS NOT NULL)  or (:old.MANAGER_ID IS NOT NULL and  :new.MANAGER_ID IS NULL))
+                 or( (:old.LOCATION_ID <> :new.LOCATION_ID) or (:old.LOCATION_ID IS NULL and  :new.LOCATION_ID IS NOT NULL)  or (:old.LOCATION_ID IS NOT NULL and  :new.LOCATION_ID IS NULL))
+                 or( (:old.EFF_DT <> :new.EFF_DT) or (:old.EFF_DT IS NULL and  :new.EFF_DT IS NOT NULL)  or (:old.EFF_DT IS NOT NULL and  :new.EFF_DT IS NULL))
+                 or( (:old.END_DT <> :new.END_DT) or (:old.END_DT IS NULL and  :new.END_DT IS NOT NULL)  or (:old.END_DT IS NOT NULL and  :new.END_DT IS NULL))
+                 or( (:old.SK_DEPARTMENT_ID <> :new.SK_DEPARTMENT_ID) or (:old.SK_DEPARTMENT_ID IS NULL and  :new.SK_DEPARTMENT_ID IS NOT NULL)  or (:old.SK_DEPARTMENT_ID IS NOT NULL and  :new.SK_DEPARTMENT_ID IS NULL))
+                 then 
+      insert into DEPARTMENTS_TEST_HIST(DEPARTMENT_ID
+                             ,DEPARTMENT_NAME
+                             ,MANAGER_ID
+                             ,LOCATION_ID
+                             ,EFF_DT
+                             ,END_DT
+                             ,SK_DEPARTMENT_ID
+                                   ,AUDIT_ACTION,AUDIT_BY,AUDIT_AT)
+      values (:new.DEPARTMENT_ID
+                             ,:new.DEPARTMENT_NAME
+                             ,:new.MANAGER_ID
+                             ,:new.LOCATION_ID
+                             ,current_timestamp
+                             ,to_timestamp('31-DEC-9999 00:00:00','DD-MON-YYYY HH24:MI:SS')
+                             ,SK_DEPARTMENT_ID_SEQ.nextval
+                                   ,'U',v_user,current_timestamp);
+  
+
+--perform a merge on the historical records to implement SCD type2 by using Lag on effective date                                 
+  Merge into departments_test_hist x
+        using 
+        (
+        select department_id,sk_department_id,eff_dt,end_dt,audit_action
+        ,case when
+        Lag (Eff_dt) over (partition by department_id order by department_id, Eff_dt desc) is NULL then to_date('31-DEC-9999','dd-mon-yyyy')
+        else Lag (Eff_dt) over ( partition by department_id order by department_id, Eff_dt desc) 
+        end as End_dt_calc
+        from departments_test_hist where department_id = :new.department_id
+        )y
+        on (x.sk_department_id = y.sk_department_id)
+        when matched then update set
+        x.end_dt = y.end_dt_calc where department_id = :new.department_id;
+        
+
+--Update records for any child that exist based on the dependent table
+
+        
+   end if; elsif deleting then
+ v_action:='DELETING';
+      insert into DEPARTMENTS_TEST_HIST(DEPARTMENT_ID
+                             ,DEPARTMENT_NAME
+                             ,MANAGER_ID
+                             ,LOCATION_ID
+                             ,EFF_DT
+                             ,END_DT
+                             ,SK_DEPARTMENT_ID
+                                   ,AUDIT_ACTION,AUDIT_BY,AUDIT_AT)
+      values (:old.DEPARTMENT_ID
+                             ,:old.DEPARTMENT_NAME
+                             ,:old.MANAGER_ID
+                             ,:old.LOCATION_ID
+                             ,:old.EFF_DT
+                             ,:old.END_DT
+                             ,:old.SK_DEPARTMENT_ID
+                                   ,'D',v_user,current_timestamp);
+   end if;
+END;
+/
+
+commit;

@@ -1,0 +1,22 @@
+--Identify dependency of tables in a schema
+WITH reference_view AS
+     (SELECT a.owner, a.table_name, a.constraint_name, a.constraint_type,
+             a.r_owner, a.r_constraint_name, b.column_name
+        FROM dba_constraints a, dba_cons_columns b
+       WHERE a.owner LIKE UPPER ('HR')
+         AND a.owner = b.owner
+         AND a.constraint_name = b.constraint_name
+         AND constraint_type = 'R'),
+     constraint_view AS
+     (SELECT a.owner a_owner, a.table_name, a.column_name, b.owner b_owner,
+             b.constraint_name
+        FROM dba_cons_columns a, dba_constraints b
+       WHERE a.owner = b.owner
+         AND a.constraint_name = b.constraint_name
+         AND b.constraint_type = 'P'
+         AND a.owner LIKE UPPER ('HR'))
+SELECT CV.a_owner a_owner, CV.table_name as parent_table, rv.column_name as parent_column, rv.owner b_owner,
+       rv.table_name as child_table, rv.column_name as foriegn_key
+  FROM reference_view rv, constraint_view CV
+ WHERE rv.r_constraint_name = CV.constraint_name AND rv.r_owner = CV.b_owner
+ order by child_table;

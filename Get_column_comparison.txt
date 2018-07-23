@@ -1,0 +1,36 @@
+--get column comparison
+CREATE OR REPLACE function get_column_comparasion (
+     table_owner   VARCHAR2,
+     t_name   VARCHAR2
+  ) RETURN CLOB
+  IS
+    v_text CLOB;
+  BEGIN
+    FOR getrec IN (SELECT column_name
+                     FROM all_tab_columns
+                    WHERE table_name = t_name
+                      AND owner = table_owner
+                      AND data_type<>'BLOB')
+   LOOP
+      v_text := v_text
+         || ' or( (:old.'
+         || getrec.column_name
+         || ' <> :new.'
+         || getrec.column_name
+         || ') or (:old.'
+         || getrec.column_name
+         || ' IS NULL and  :new.'
+         || getrec.column_name
+         || ' IS NOT NULL)  or (:old.'
+         || getrec.column_name
+         || ' IS NOT NULL and  :new.'
+         || getrec.column_name
+         || ' IS NULL))'
+         || CHR (10)
+         || '                ';
+   END LOOP;
+
+   v_text := LTRIM (v_text, ' or');
+   RETURN v_text;
+  END;
+/

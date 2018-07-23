@@ -1,0 +1,73 @@
+insert into DEPARTMENTS_TEST(DEPARTMENT_ID
+                             ,DEPARTMENT_NAME
+                             ,MANAGER_ID
+                             ,LOCATION_ID
+                             ,EFF_DT
+                             ,END_DT
+                             ,SK_DEPARTMENT_ID
+                            )
+      values (                10
+                             ,'Administration'
+                             ,200
+                             ,1700
+                             ,current_timestamp
+                             ,to_timestamp('31-DEC-9999 00:00:00' , 'DD-MON-YYYY HH24:MI:SS')
+                             --,(Select max(SK_DEPARTMENT_ID) as SK_DEPARTMENT_ID from HR.DEPARTMENTS_TEST)
+                             ,2000);
+
+commit;
+
+
+
+update departments_test set DEPARTMENT_ID = 11 where sk_department_id = 2000;
+commit;
+
+update departments_test set MANAGER_ID = 180 where sk_department_id = 2000;
+
+commit;
+
+select * from departments_test where department_id = 10;
+select * from departments_test_hist where department_id in (10,11);
+
+commit;
+
+
+
+
+
+Merge into departments_test_hist x
+        using 
+        (
+        select department_id,sk_department_id,eff_dt,end_dt,audit_action
+        ,case when
+        Lag (Eff_dt) over (partition by department_id order by department_id, Eff_dt desc) is NULL then to_date('31-DEC-9999','dd-mon-yyyy')
+        else Lag (Eff_dt) over ( partition by department_id order by department_id, Eff_dt desc) 
+        end as End_dt_calc
+        from departments_test_hist where department_id = 10
+        )y
+        on (x.sk_department_id = y.sk_department_id)
+        when matched then update set
+        x.end_dt = y.end_dt_calc where department_id = 10 ;
+
+commit;
+
+select * from hr.departments_test_hist where department_id = 10;
+commit;
+
+
+  
+commit;
+  
+
+
+delete from departments_test where sk_department_id = 2000;
+
+commit;
+
+delete from departments_test_hist where sk_department_id >= 2000 and department_id = 10;
+commit;
+
+
+delete from departments_test_hist where  sk_department_id is null;
+commit;
+
