@@ -1,0 +1,85 @@
+create or replace procedure emp_test_upd_proc(dept_id IN departments_test.department_id%TYPE,old_sk_dept_id IN departments_test.sk_department_id%TYPE) as 
+l_sk_dep_id         departments_test.sk_department_id%TYPE;
+i_dept_id           departments_test.department_id%TYPE;
+i_old_sk_dept_id    departments_test.sk_department_id%TYPE;
+
+BEGIN
+
+i_dept_id := dept_id;
+i_old_sk_dept_id := old_sk_dept_id;
+
+SELECT SK_DEPARTMENT_ID into l_sk_dep_id FROM DEPARTMENTS_TEST 
+   WHERE DEPARTMENT_ID = i_dept_id  AND END_DT = to_date('31-DEC-9999','DD-MON-YYYY')
+   order by sk_department_id desc fetch first row only;
+  
+
+   insert into EMPLOYEE_TEST( EMPLOYEE_ID
+                                ,FIRST_NAME
+                                ,LAST_NAME
+                                ,EMAIL
+                                ,PHONE_NUMBER
+                                ,HIRE_DATE
+                                ,JOB_ID
+                                ,SALARY
+                                ,COMMISSION_PCT
+                                ,MANAGER_ID
+                                ,SK_DEPARTMENT_ID
+                                ,EFF_DT
+                                ,END_DT
+                                ,EMPLOYEE_ID_SK) 
+				 		Select 
+				        EMPLOYEE_ID
+				        ,FIRST_NAME
+				        ,LAST_NAME
+				        ,EMAIL
+				        ,PHONE_NUMBER
+				        ,HIRE_DATE
+				        ,JOB_ID
+				        ,SALARY
+				        ,COMMISSION_PCT
+				        ,MANAGER_ID
+				        ,l_sk_dep_id 
+				        ,current_timestamp
+				        ,to_timestamp('31-DEC-9999 00:00:00','DD-MON-YYYY HH24:MI:SS') as END_DT
+				        ,EMPLOYEE_ID_SK_SEQ.nextval
+				        from employee_test
+				         where SK_DEPARTMENT_ID = i_old_sk_dept_id and END_DT = to_date('31-DEC-9999','DD-MON-YYYY');
+
+commit;
+--perform a merge on the historical records to implement SCD type2 by using Lag on effective date  
+Merge into employee_test x using 
+
+          (select a.employee_id,a.employee_id_sk, a.eff_dt, b.end_dt,a.end_dt_calc,a.sk_department_id
+          from 
+            (select employee_id, employee_id_sk ,eff_dt,sk_department_id,
+            case when
+            Lag (Eff_dt) over (partition by employee_id order by employee_id, Eff_dt desc) is NULL then to_date('31-DEC-9999','dd-mon-yyyy')
+            else Lag (Eff_dt) over ( partition by employee_id order by employee_id, Eff_dt desc) 
+            end as End_dt_calc
+            from employee_test where employee_id in (Select employee_id from employee_test where sk_department_id = i_old_sk_dept_id)
+            ) a         
+           inner join employee_test b
+           on a.employee_id = b.employee_id and a.employee_id_sk = b.employee_id_sk
+           where a.END_DT_CALC <> b.END_DT)y
+  on (x.employee_id_sk = y.employee_id_sk)
+  when matched then update set x.end_dt = y.end_dt_calc;
+
+commit;
+
+end;
+
+/
+commit;
+
+
+
+
+CREATE OR REPLACE TRIGGER TRIGGER_DEPARTMENTS_TEST AFTER UPDATE ON DEPARTMENTS_TEST FOR EACH ROW
+Declare
+Pragma autonomous_transaction;
+BEGIN
+
+emp_test_upd_proc(:old.department_id,:old.sk_department_id);
+commit;
+END;
+/
